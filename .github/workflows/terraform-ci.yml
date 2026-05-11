@@ -78,7 +78,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const plan = fs.readFileSync('infra/plan_output.txt', 'utf8');
+            const plan = fs.readFileSync('infra/plan.txt', 'utf8');
             const output = `#### Terraform Plan 📖
             <details><summary>Show Plan</summary>
 
