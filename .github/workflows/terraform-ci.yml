@@ -1,0 +1,94 @@
+name: Terraform CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build the zip
+        run: |
+          cd app/
+          zip function.zip index.js
+
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: function-zip
+          path: app/function.zip
+
+  terraform:
+    name: Terraform
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download zip artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: function-zip
+          path: infra/modules/compute_lambda/app/
+
+      - name: Terraform Format
+        working-directory: infra/
+        run: terraform fmt --check -recursive
+
+      - name: Terraform Init
+        working-directory: infra/
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        working-directory: infra/
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: infra/
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          terraform plan -no-color -var-file=envs/dev/dev.tfvars > plan_output.txt
+          cat plan_output.txt
+
+      - name: Post Plan Comment
+        uses: actions/github-script@v7
+        if: always() && steps.plan.outcome == 'success'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('infra/plan_output.txt', 'utf8');
+            const output = `#### Terraform Plan 📖
+            <details><summary>Show Plan</summary>
+
+            \`\`\`hcl
+            ${plan}
+            \`\`\`
+
+            </details>
+
+            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
