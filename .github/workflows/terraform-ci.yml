@@ -71,28 +71,24 @@ jobs:
         id: plan
         run: terraform plan -var-file=envs/dev/dev.tfvars | tee plan.txt
 
-      - name: Post Plan Comment
+      - name: Post Plan as PR Comment
         uses: actions/github-script@v7
-        if: always() && steps.plan.outcome == 'success'
+        continue-on-error: true
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const plan = fs.readFileSync('infra/plan.txt', 'utf8');
-            const output = `#### Terraform Plan 📖
-            <details><summary>Show Plan</summary>
-
-            \`\`\`hcl
+            const plan = fs.readFileSync('plan.txt', 'utf8');
+            const output = `<details><summary>Terraform Plan</summary>
+            
+            \`\`\`terraform
             ${plan}
             \`\`\`
-
-            </details>
-
-            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
-
-            github.rest.issues.createComment({
+            </details>`;
+            
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: output
-            })
+            });
+  
